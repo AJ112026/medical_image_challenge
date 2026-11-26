@@ -1,8 +1,14 @@
+import io
 from pathlib import Path
 
+import h5py
+import numpy as np
 import pandas as pd
+import torch
+from PIL import Image
+from sklearn.model_selection import StratifiedGroupKFold
 from torch.utils.data import Dataset
-
+from torchvision import transforms
 
 def read_metadata(path, training=True):
     """Read metadata and return a pandas DataFrame.
@@ -11,10 +17,20 @@ def read_metadata(path, training=True):
         Training: isic_id, patient_id, target
         Test: isic_id
     """
-    # TODO: Read the CSV file.
-    # TODO: Check required columns and missing identifiers.
-    # TODO: Check that training targets contain only 0 and 1.
-    raise NotImplementedError("TODO: read and validate metadata")
+    df = pd.read_csv(path, low_memory=False)  # CSV inlezen
+
+    required = ["isic_id", "patient_id", "target"] if training else ["isic_id"]
+    missing = [col for col in required if col not in df.columns]  # welke kolommen ontbreken?
+    if missing:
+        raise ValueError(f"Ontbrekende kolommen: {missing}")
+
+    if df["isic_id"].isna().any():  # zijn er lege isic_id's?
+        raise ValueError("Er zijn lege isic_id's")
+
+    if training and not set(df["target"].unique()) <= {0, 1}:
+        raise ValueError("Target bevat andere waarden dan 0 en 1")
+
+    return df
 
 
 def split_metadata(metadata, seed=42):
@@ -30,11 +46,9 @@ def split_metadata(metadata, seed=42):
     # Hint: Consider sklearn.model_selection.StratifiedGroupKFold.
     # TODO: Check patient overlap and class distributions.
     raise NotImplementedError("TODO: implement a patient-level split")
-
-
 def build_transforms(image_size=224, training=True):
     """Return a transform mapping an RGB PIL image to a tensor [3, H, W]."""
-    # TODO: Resize the image.
+    #TODO: Resize the image.
     # TODO: Apply augmentation only during training.
     # TODO: Convert to a tensor and normalize.
     raise NotImplementedError("TODO: define image transforms")
@@ -55,29 +69,29 @@ class ISICDataset(Dataset):
 """
 
 
-def __init__(self, metadata, image_path, transform, training=True):
-    self.metadata = metadata.reset_index(drop=True).copy()
-    self.image_path = Path(image_path)
-    self.transform = transform
-    self.training = training
+    def __init__(self, metadata, image_path, transform, training=True):
+        self.metadata = metadata.reset_index(drop=True).copy()
+        self.image_path = Path(image_path)
+        self.transform = transform
+        self.training = training
 
 
-def __len__(self):
-    return len(self.metadata)
+    def __len__(self):
+        return len(self.metadata)
 
 
-def __getitem__(self, index):
-    row = self.metadata.iloc[index]
-    isic_id = row["isic_id"]
+    def __getitem__(self, index):
+        row = self.metadata.iloc[index]
+        isic_id = row["isic_id"]
 
-    # TODO: Open the HDF5 file using h5py.File.
-    # TODO: Read the encoded image bytes using isic_id as the key.
-    # Hint: Decode the bytes using io.BytesIO and PIL.Image.
-    # TODO: Convert the image to RGB and apply self.transform.
-    # TODO: Return a dictionary following the contract above.
-    # Include target only when self.training is True.
-    #
-    # Use a context manager for the HDF5 file. Do not share an
-    # open file handle between DataLoader workers.
+        # TODO: Open the HDF5 file using h5py.File.
+        # TODO: Read the encoded image bytes using isic_id as the key.
+        # Hint: Decode the bytes using io.BytesIO and PIL.Image.
+        # TODO: Convert the image to RGB and apply self.transform.
+        # TODO: Return a dictionary following the contract above.
+        # Include target only when self.training is True.
+        #
+        # Use a context manager for the HDF5 file. Do not share an
+        # open file handle between DataLoader workers.
 
-    raise NotImplementedError(f"TODO: load image {isic_id}")
+        raise NotImplementedError(f"TODO: load image {isic_id}")
