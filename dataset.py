@@ -46,12 +46,27 @@ def split_metadata(metadata, seed=42):
     # Hint: Consider sklearn.model_selection.StratifiedGroupKFold.
     # TODO: Check patient overlap and class distributions.
     raise NotImplementedError("TODO: implement a patient-level split")
+
 def build_transforms(image_size=224, training=True):
     """Return a transform mapping an RGB PIL image to a tensor [3, H, W]."""
-    #TODO: Resize the image.
-    # TODO: Apply augmentation only during training.
-    # TODO: Convert to a tensor and normalize.
-    raise NotImplementedError("TODO: define image transforms")
+    steps = [transforms.Resize((image_size, image_size))]  # uitsneden zijn ~128 px, het model verwacht ~224 px
+
+    if training:  # augmentatie ALLEEN tijdens het trainen
+        steps += [
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            # willekeurige draaiing in stappen van 90 graden (geen interpolatie, geen zwarte hoeken)
+            transforms.RandomChoice([transforms.RandomRotation((a, a)) for a in (0, 90, 180, 270)]),
+            # lichte verandering van helderheid en contrast (belichting verschilt tussen foto's);
+            # bewust GEEN tint/verzadiging: de kleur van de vlek is een belangrijk signaal
+            transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        ]
+
+    steps += [
+        transforms.ToTensor(),  # PIL [H, W, 3] in 0-255  ->  float32 [3, H, W] in 0-1
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # ImageNet-statistieken
+    ]
+    return transforms.Compose(steps)
 
 
 class ISICDataset(Dataset):
