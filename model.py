@@ -4,11 +4,11 @@ from torch import nn
 
 
 class SkinLesionClassifier(nn.Module):
-    def __init__(self, model_name="edgenext_small", pretrained=False):
+    def __init__(self, model_name="edgenext_small", pretrained=False, dropout=0.2):
         super().__init__()
 
         self.backbone = timm.create_model(model_name, pretrained=pretrained, num_classes=0)
-        self.head = nn.Linear(self.backbone.num_features, 1)
+        self.head = nn.Sequential(nn.Dropout(p=dropout), nn.Linear(self.backbone.num_features, 1),)
 
         
     def forward(self, images):
@@ -26,7 +26,7 @@ class SkinLesionClassifier(nn.Module):
         return logits.squeeze(-1)
 
 
-def predict(model, loader, device):
+def predict(model, loader, device, use_tta=False):
     """Generate predictions.
 
     Returns:
@@ -42,8 +42,18 @@ def predict(model, loader, device):
     with torch.no_grad():  # zet bijhouden gradienten uit (sneller en minder geheugen)
         for batch in loader:
             images = batch["image"].to(device)
-            logits = model(images)
-            probs = torch.sigmoid(logits)  # zet logits naar kans tss 0 en 1
+
+            if use_tta:
+                views = [
+                    images,
+                    torch.flip(images, dims=[3]),     # horizontaal gespiegeld
+                    torch.flip(images, dims=[2]),     # verticaal gespiegeld
+                    torch.flip(images, dims=[2, 3]),  # beide richtingen gespiegeld
+                ]
+                probs = sum(torch.sigmoid(model(v)) for v in views) / len(views)
+            else:
+                logits = model(images)
+                probs = torch.sigmoid(logits)  # zet logits naar kans tss 0 en 1
 
             isic_ids.extend(batch["isic_id"])  # zet de isic_ids van de batch in de lijst
             probabilities.extend(probs.cpu().tolist())
