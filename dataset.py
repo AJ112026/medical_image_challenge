@@ -46,12 +46,27 @@ def split_metadata(metadata, seed=42):
     # Hint: Consider sklearn.model_selection.StratifiedGroupKFold.
     # TODO: Check patient overlap and class distributions.
     raise NotImplementedError("TODO: implement a patient-level split")
+
 def build_transforms(image_size=224, training=True):
     """Return a transform mapping an RGB PIL image to a tensor [3, H, W]."""
-    #TODO: Resize the image.
-    # TODO: Apply augmentation only during training.
-    # TODO: Convert to a tensor and normalize.
-    raise NotImplementedError("TODO: define image transforms")
+    steps = [transforms.Resize((image_size, image_size))]  # uitsneden zijn ~128 px, het model verwacht ~224 px
+
+    if training:  # augmentatie ALLEEN tijdens het trainen
+        steps += [
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            # willekeurige draaiing in stappen van 90 graden (geen interpolatie, geen zwarte hoeken)
+            transforms.RandomChoice([transforms.RandomRotation((a, a)) for a in (0, 90, 180, 270)]),
+            # lichte verandering van helderheid en contrast (belichting verschilt tussen foto's);
+            # bewust GEEN tint/verzadiging: de kleur van de vlek is een belangrijk signaal
+            transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        ]
+
+    steps += [
+        transforms.ToTensor(),  # PIL [H, W, 3] in 0-255  ->  float32 [3, H, W] in 0-1
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # ImageNet-statistieken
+    ]
+    return transforms.Compose(steps)
 
 
 class ISICDataset(Dataset):
@@ -84,14 +99,15 @@ class ISICDataset(Dataset):
         row = self.metadata.iloc[index]
         isic_id = row["isic_id"]
 
-        # TODO: Open the HDF5 file using h5py.File.
-        # TODO: Read the encoded image bytes using isic_id as the key.
-        # Hint: Decode the bytes using io.BytesIO and PIL.Image.
-        # TODO: Convert the image to RGB and apply self.transform.
-        # TODO: Return a dictionary following the contract above.
-        # Include target only when self.training is True.
-        #
-        # Use a context manager for the HDF5 file. Do not share an
-        # open file handle between DataLoader workers.
+        with h5py.File(self.image_path, "r") as f:
+            if isic_id not in f:
+                raise KeyError(f"{isic_id} staat niet in {self.image_path}")
+            raw = f[isic_id][()]  # gecodeerde JPEG-bytes
 
-        raise NotImplementedError(f"TODO: load image {isic_id}")
+        image = Image.open(io.BytesIO(np.asarray(raw).tobytes())).convert("RGB")
+        image = self.transform(image)  # -> float32 tensor [3, H, W]
+
+        item = {"image": image, "isic_id": isic_id}
+        if self.training:
+            item["target"] = torch.tensor(row["target"], dtype=torch.float32)
+        return item
