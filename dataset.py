@@ -99,14 +99,15 @@ class ISICDataset(Dataset):
         row = self.metadata.iloc[index]
         isic_id = row["isic_id"]
 
-        # TODO: Open the HDF5 file using h5py.File.
-        # TODO: Read the encoded image bytes using isic_id as the key.
-        # Hint: Decode the bytes using io.BytesIO and PIL.Image.
-        # TODO: Convert the image to RGB and apply self.transform.
-        # TODO: Return a dictionary following the contract above.
-        # Include target only when self.training is True.
-        #
-        # Use a context manager for the HDF5 file. Do not share an
-        # open file handle between DataLoader workers.
+        with h5py.File(self.image_path, "r") as f:
+            if isic_id not in f:
+                raise KeyError(f"{isic_id} staat niet in {self.image_path}")
+            raw = f[isic_id][()]  # gecodeerde JPEG-bytes
 
-        raise NotImplementedError(f"TODO: load image {isic_id}")
+        image = Image.open(io.BytesIO(np.asarray(raw).tobytes())).convert("RGB")
+        image = self.transform(image)  # -> float32 tensor [3, H, W]
+
+        item = {"image": image, "isic_id": isic_id}
+        if self.training:
+            item["target"] = torch.tensor(row["target"], dtype=torch.float32)
+        return item
